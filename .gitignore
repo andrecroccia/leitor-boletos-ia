@@ -1,0 +1,14 @@
+# segredos
+.env
+
+# resultados gerados
+saida/
+
+# NUNCA versionar boletos reais: so os ficticios de exemplo
+*.pdf
+!boletos_exemplo/*.pdf
+boletos_reais/
+
+__pycache__/
+*.pyc
+.venv/
