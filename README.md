@@ -115,6 +115,22 @@ O processamento completo levou cerca de 5 minutos (de 30 a 60 s por resposta da 
 - **Feedback específico** funciona melhor. "Não está no cadastro" não ajudou a IA a corrigir; já "este é o CNPJ do PAGADOR, deixe vazio" ajudou.
 - Um exemplo de formato nas instruções (`00.000.000/0000-00`) chegou a ser **copiado** pela IA como se fosse um CNPJ. Por isso a conferência também verifica se cada CNPJ aparece escrito no PDF.
 
+### Resultado real com `gemini-flash-lite-latest` (camada gratuita)
+
+| Boleto | Tentativas da IA | O que aconteceu |
+|---|---|---|
+| VidaDent 0457 | 1 | Acertou de primeira |
+| Mais Dente G-3310 | 1 | Acertou de primeira (sem copiar o CNPJ do pagador) |
+| VidaDent 0458 (erro proposital) | 3 | Manteve os valores do documento **sem inventar nada**. A soma não fechou e o boleto foi para REVISAR |
+
+O processamento completo levou cerca de **18 segundos**, contra 5 minutos no Ollama.
+
+**Lições de usar uma IA na nuvem:**
+
+- **Modelos são aposentados.** O `gemini-2.5-flash` já não estava disponível para chaves novas (erro 404). Use os apelidos `...-latest`.
+- **No plano grátis, o servidor fica ocupado** (erro 503 "high demand"), e o `gemini-flash-latest` chegou a nem responder. Por isso o programa **espera e tenta de novo** (5 s, 15 s, 45 s), e o padrão é o `flash-lite`, que costuma responder na hora.
+- **Comparando:** o modelo da nuvem é mais rápido e mais esperto, mas os dados saem do seu computador. O modelo local é lento e erra mais, mas nada sai do PC. As conferências em código valem para os dois.
+
 ---
 
 ## Como rodar

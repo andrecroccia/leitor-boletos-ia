@@ -62,20 +62,42 @@ class ErroIA(Exception):
     pass
 
 
+# Erros "temporarios" do servidor: vale esperar e tentar de novo.
+# 429 = limite de uso por minuto; 500/502/503/504 = servidor ocupado/instavel.
+_TEMPORARIOS = {429, 500, 502, 503, 504}
+
+
 def _post_json(url: str, corpo: dict, cabecalhos: dict, timeout: int) -> dict:
-    req = urllib.request.Request(
-        url, data=json.dumps(corpo).encode("utf-8"),
-        headers={"Content-Type": "application/json", **cabecalhos}, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.loads(r.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        detalhe = e.read().decode("utf-8", "replace")[:300]
-        raise ErroIA(f"HTTP {e.code}: {detalhe}") from None
-    except urllib.error.URLError as e:
-        raise ErroIA(f"sem conexao com {url.split('?')[0]} ({e.reason})") from None
-    except TimeoutError:
-        raise ErroIA(f"tempo esgotado ({timeout}s)") from None
+    """POST com JSON. Em erro temporario, espera cada vez mais e tenta de novo
+    ("exponential backoff"): 5s, 15s, 45s..."""
+    tentativas = int(os.environ.get("IA_TENTATIVAS_REDE", "4"))
+    for n in range(1, tentativas + 1):
+        req = urllib.request.Request(
+            url, data=json.dumps(corpo).encode("utf-8"),
+            headers={"Content-Type": "application/json", **cabecalhos}, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            detalhe = e.read().decode("utf-8", "replace")
+            try:  # mostra so a mensagem do erro, nao o JSON inteiro
+                detalhe = json.loads(detalhe)["error"]["message"]
+            except (ValueError, KeyError, TypeError):
+                pass
+            erro = ErroIA(f"HTTP {e.code}: {detalhe[:200]}")
+            if e.code not in _TEMPORARIOS:
+                raise erro from None
+        except urllib.error.URLError as e:
+            erro = ErroIA(f"sem conexao com {url.split('?')[0]} ({e.reason})")
+            if "localhost" in url:  # Ollama fechado: nao adianta esperar
+                raise erro from None
+        except TimeoutError:
+            erro = ErroIA(f"tempo esgotado ({timeout}s)")
+        if n < tentativas:
+            espera = 5 * 3 ** (n - 1)
+            print(f"     ({erro}; tentando de novo em {espera}s)")
+            time.sleep(espera)
+    raise erro
 
 
 # ------------------------------------------------------------------- Ollama
@@ -97,7 +119,7 @@ def _gemini(mensagens: list[dict]) -> tuple[str, str]:
     chave = os.environ.get("GEMINI_API_KEY", "")
     if not chave:
         raise ErroIA("GEMINI_API_KEY nao definida (veja o .env.exemplo)")
-    modelo = os.environ.get("GEMINI_MODELO", "gemini-2.5-flash")
+    modelo = os.environ.get("GEMINI_MODELO", "gemini-flash-lite-latest")
     papel = {"user": "user", "assistant": "model"}
     resp = _post_json(
         f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent",
