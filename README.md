@@ -23,7 +23,7 @@ flowchart TD
     E --> F[IA extrai JSON<br/>Ollama ou Gemini]
     D --> G{Conferências em código}
     F --> G
-    G -- reprovou e veio da IA --> H[Devolve os erros para a IA<br/>1 nova tentativa]
+    G -- reprovou e veio da IA --> H[Devolve os erros para a IA<br/>até 2 correções]
     H --> G
     G -- aprovou --> I{Mais de 1 unidade?}
     G -- reprovou de novo --> R[REVISAR<br/>nada é gerado]
@@ -81,7 +81,7 @@ A IA **erra de vez em quando**. Por isso nenhuma resposta vira planilha sem pass
 
 ### 5. Tentar de novo (o "agente")
 
-Se a conferência reprovar uma resposta da IA, o programa devolve os erros encontrados para ela ("a soma deu X, mas o total é Y") e pede uma correção. É **uma** tentativa a mais. Se reprovar de novo, o boleto vai para **revisão humana**.
+Se a conferência reprovar uma resposta da IA, o programa devolve os erros encontrados para ela ("a soma deu X, mas o total é Y") e pede uma correção. São até **2 correções** (ajustável em `IA_CORRECOES`). Se continuar reprovando, o boleto vai para **revisão humana**.
 
 Esse ciclo (agir → conferir → corrigir) é a ideia central de um agente. Aqui ele é controlado pelo código: a IA não decide sozinha o que fazer.
 
@@ -98,6 +98,22 @@ Esse ciclo (agir → conferir → corrigir) é a ideia central de um agente. Aqu
 | `maisdente_G-3310.pdf` | Mais Dente | Texto corrido, com créditos e descontos | IA | Rateio em 3 unidades |
 
 O cadastro de unidades (apólice + sub → CNPJ) fica em `dados/cadastro_unidades.csv`.
+
+### Resultado real com `qwen2.5:3b` (Ollama, notebook i3 sem GPU, 8 GB)
+
+| Boleto | Tentativas da IA | O que aconteceu |
+|---|---|---|
+| VidaDent 0457 | 1 | Acertou de primeira, inclusive o ajuste negativo |
+| Mais Dente G-3310 | 3 | 1ª: repetiu o **CNPJ do pagador** em todas as subs. 2ª: corrigiu duas. 3ª: acertou |
+| VidaDent 0458 (erro proposital) | 3 | Para "fechar" a soma, **inventou** o valor 330,30. A conferência pegou e o boleto foi para REVISAR, como deveria |
+
+O processamento completo levou cerca de 5 minutos (de 30 a 60 s por resposta da IA).
+
+**Lições do teste:**
+
+- A IA **erra e até inventa números** para "agradar". Sem as conferências em código, a planilha errada teria sido gerada.
+- **Feedback específico** funciona melhor. "Não está no cadastro" não ajudou a IA a corrigir; já "este é o CNPJ do PAGADOR, deixe vazio" ajudou.
+- Um exemplo de formato nas instruções (`00.000.000/0000-00`) chegou a ser **copiado** pela IA como se fosse um CNPJ. Por isso a conferência também verifica se cada CNPJ aparece escrito no PDF.
 
 ---
 

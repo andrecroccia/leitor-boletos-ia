@@ -28,12 +28,15 @@ RAIZ = Path(__file__).resolve().parent
 
 
 def ler_com_ia(texto: str, texto_conferencia: str, provedor: str, cadastro):
-    """Extrai com IA e, se a conferencia reprovar, da UMA chance de corrigir."""
+    """Extrai com IA e, enquanto a conferencia reprovar, devolve os erros para
+    a IA corrigir (ate IA_CORRECOES vezes; padrao 2)."""
     dados, conversa, modelo, seg = ia.extrair(texto, provedor)
     print(f"     IA ({modelo}) respondeu em {seg:.0f}s")
     linhas, problemas = validar(dados, texto_conferencia, cadastro)
-    if problemas:
-        print("     conferencia reprovou; pedindo para a IA corrigir:")
+    for tentativa in range(1, int(os.environ.get("IA_CORRECOES", "2")) + 1):
+        if not problemas:
+            break
+        print(f"     conferencia reprovou; pedindo correcao ({tentativa}):")
         for p in problemas:
             print(f"       - {p}")
         dados, conversa, modelo, seg = ia.extrair(texto, provedor, ia.pedir_correcao(conversa, problemas))

@@ -47,10 +47,11 @@ Regras:
 - operadora: nome da empresa que esta cobrando.
 - apolice: numero da apolice, contrato ou grupo contratante, exatamente como escrito.
 - valor_total: valor total a pagar do documento.
-- cnpj_pagador: CNPJ de quem paga (sacado/pagador/responsavel financeiro), formato 00.000.000/0000-00.
+- cnpj_pagador: CNPJ de quem paga (sacado/pagador/responsavel financeiro), copiado do documento.
 - subfaturas: uma entrada por unidade/subfatura/subgrupo cobrado.
-  - sub: numero da subfatura/subgrupo como aparece (ex.: "01"); use "" se nao houver numero.
-  - cnpj: CNPJ daquela unidade se aparecer na linha dela; senao "".
+  - sub: numero da subfatura/subgrupo como aparece; use "" se nao houver numero.
+  - cnpj: SOMENTE se houver um CNPJ escrito na mesma linha da unidade. Se nao houver, "".
+    O CNPJ do pagador nao e o CNPJ das unidades.
   - valor: valor FINAL devido daquela unidade (ja com coparticipacao, ajustes, descontos e creditos).
 - Valores como numero com ponto decimal (ex.: 1068.30). Negativos com sinal de menos.
 - Nao invente nada: copie os numeros do documento. Nao some nem calcule se o valor final ja estiver escrito.

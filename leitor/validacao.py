@@ -3,6 +3,7 @@
 Nada vira planilha sem passar por aqui, venha do parser ou da IA.
 """
 import csv
+import re
 from pathlib import Path
 
 from .util import brl, so_digitos
@@ -48,6 +49,11 @@ class Cadastro:
         return self.por_sub.get((ap, _norm_sub(sub)))
 
 
+_RE_CNPJ = re.compile(r"\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}")
+DICA_CNPJ = ("Preencha cnpj da subfatura SOMENTE se houver um CNPJ escrito na linha "
+             "daquela unidade; caso contrario use cnpj vazio (\"\").")
+
+
 def _aparece(valor: float, texto: str) -> bool:
     """O numero esta escrito no documento? (pega 'alucinacao' da IA)"""
     return brl(valor) in texto or brl(abs(valor)) in texto
@@ -74,6 +80,13 @@ def validar(dados: dict, texto: str, cadastro: Cadastro):
     if pagador and not cnpj_valido(pagador):
         problemas.append(f"CNPJ do pagador invalido: {pagador}")
 
+    # Cada unidade tem CNPJ proprio. O mesmo CNPJ em varias subfaturas quase
+    # sempre e o CNPJ do pagador copiado por engano (erro comum de modelo pequeno).
+    cnpjs = [so_digitos(s.get("cnpj")) for s in subs if isinstance(s, dict)]
+    repetidos = {c for c in cnpjs if c and cnpjs.count(c) > 1}
+    # CNPJs que estao de fato escritos no documento (pega CNPJ inventado)
+    cnpjs_doc = {so_digitos(c) for c in _RE_CNPJ.findall(texto)}
+
     soma = 0.0
     for s in subs:
         try:
@@ -86,12 +99,26 @@ def validar(dados: dict, texto: str, cadastro: Cadastro):
         rotulo = f"sub {sub or '?'}" + (f" ({cnpj})" if cnpj else "")
         if not _aparece(valor, texto):
             problemas.append(f"{rotulo}: valor {brl(valor)} nao aparece no documento")
-        if cnpj and not cnpj_valido(cnpj):
-            problemas.append(f"{rotulo}: CNPJ com digito verificador invalido")
-            continue
+        d = so_digitos(cnpj)
+        if d:
+            if d not in cnpjs_doc:
+                problemas.append(f"{rotulo}: este CNPJ nao aparece no documento (inventado?). {DICA_CNPJ}")
+                continue
+            if d in repetidos:
+                eh_pagador = d == so_digitos(pagador)
+                problemas.append(f"{rotulo}: o mesmo CNPJ foi usado em varias subfaturas"
+                                 + (" e ele e o CNPJ do PAGADOR" if eh_pagador else "")
+                                 + f". {DICA_CNPJ}")
+                continue
+            if not cnpj_valido(cnpj):
+                problemas.append(f"{rotulo}: CNPJ com digito verificador invalido. {DICA_CNPJ}")
+                continue
         achado = cadastro.localizar(apolice, sub, cnpj)
         if not achado:
-            problemas.append(f"{rotulo}: nao esta no cadastro para a apolice {apolice}")
+            if d and d == so_digitos(pagador):
+                problemas.append(f"{rotulo}: este e o CNPJ do PAGADOR, nao o da unidade. {DICA_CNPJ}")
+            else:
+                problemas.append(f"{rotulo}: nao esta no cadastro para a apolice {apolice}")
             continue
         linhas.append({"sub": sub, "cnpj": achado[0], "unidade": achado[1], "valor": valor})
 

@@ -44,7 +44,8 @@ class IAFalsa:
 class TestPipeline(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        gerar_exemplos.main()
+        if not (RAIZ / "dados" / "cadastro_unidades.csv").exists() or not list(PDF.glob("*.pdf")):
+            gerar_exemplos.main()
         cls.cadastro = Cadastro(RAIZ / "dados" / "cadastro_unidades.csv")
 
     def tearDown(self):
@@ -103,12 +104,35 @@ class TestPipeline(unittest.TestCase):
         _, problemas = validar(inventado, texto, self.cadastro)
         self.assertTrue(any("nao aparece no documento" in p for p in problemas))
 
+    def test_ia_copia_cnpj_do_pagador_e_corrige(self):
+        # Erro real do qwen2.5:3b no layout Mais Dente: CNPJ do pagador em todas as subs
+        base = {"operadora": "Mais Dente", "apolice": "G-3310", "valor_total": 1040.00,
+                "cnpj_pagador": "11.222.333/0001-81"}
+        valores = [("01", 480.00), ("02", 310.00), ("03", 250.00)]
+        errado = {**base, "subfaturas": [{"sub": s, "cnpj": base["cnpj_pagador"], "valor": v}
+                                         for s, v in valores]}
+        certo = {**base, "subfaturas": [{"sub": s, "cnpj": "", "valor": v} for s, v in valores]}
+        falsa = IAFalsa(errado, certo)
+        ia.PROVEDORES["falsa"] = falsa
+        _, texto = self.texto("maisdente_G-3310.pdf")
+        _, linhas, problemas, _ = processar.ler_com_ia(texto, texto, "falsa", self.cadastro)
+        self.assertEqual(problemas, [])
+        self.assertEqual([l["unidade"] for l in linhas], ["Shopping Norte", "Shopping Sul", "Lagoa"])
+        self.assertIn("CNPJ do PAGADOR", falsa.recebido[1][-1]["content"])
+
+    def test_ia_inventa_cnpj(self):
+        inventado = json.loads(json.dumps(VIDADENT_CERTO))
+        inventado["subfaturas"][0]["cnpj"] = "00.000.000/0001-91"  # DV valido, mas nao esta no PDF
+        _, texto = self.texto("vidadent_VD-2026-0457.pdf")
+        _, problemas = validar(inventado, texto, self.cadastro)
+        self.assertTrue(any("nao aparece no documento" in p for p in problemas))
+
     def test_documento_inconsistente_vai_para_revisao(self):
         resposta = {"operadora": "VidaDent", "apolice": "VD-2026-0458", "valor_total": 480.00,
                     "cnpj_pagador": "11.222.333/0001-81", "subfaturas": [
                         {"sub": "", "cnpj": "11.222.333/0002-62", "valor": 149.70},
                         {"sub": "", "cnpj": "11.222.333/0008-58", "valor": 279.50}]}
-        ia.PROVEDORES["falsa"] = IAFalsa(resposta, resposta)
+        ia.PROVEDORES["falsa"] = IAFalsa(resposta, resposta, resposta)
         _, texto = self.texto("vidadent_VD-2026-0458_com_erro.pdf")
         _, _, problemas, _ = processar.ler_com_ia(texto, texto, "falsa", self.cadastro)
         self.assertTrue(any("diferente do total" in p for p in problemas))
